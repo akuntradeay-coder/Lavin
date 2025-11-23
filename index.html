@@ -71,6 +71,11 @@
             color: #0c5460; 
             border-left-color: #17a2b8;
         }
+        .tunggu { 
+            background: #f8d7da; 
+            color: #721c24; 
+            border-left-color: #dc3545;
+        }
         .chart-container { 
             margin-top: 30px; 
             background: white;
@@ -114,6 +119,54 @@
             border-radius: 4px;
             border-left: 3px solid #6c757d;
         }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        .buy-recommendation {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: bold;
+            text-align: center;
+            font-size: 18px;
+        }
+        .buy-yes {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+        .buy-wait {
+            background: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffc107;
+        }
+        .buy-no {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #dc3545;
+        }
+        .risk-level {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .risk-low { background: #28a745; color: white; }
+        .risk-medium { background: #ffc107; color: black; }
+        .risk-high { background: #dc3545; color: white; }
     </style>
 </head>
 <body>
@@ -148,10 +201,6 @@
                 return;
             }
 
-            if (stockData.length > 0) {
-                console.log('Data pertama:', stockData[0]);
-            }
-
             const analysis = analyzeStockData(stockData);
             displayResult(analysis, stockData);
         }
@@ -166,7 +215,6 @@
                 const parts = line.trim().split('\t');
                 if (parts.length >= 7) {
                     try {
-                        // Parse data dengan format: Day Date Open High Low Close Volume Value ...
                         const dataPoint = {
                             Day: parseInt(parts[0]),
                             Date: parts[1],
@@ -187,7 +235,6 @@
                 }
             }
             
-            // Urutkan dari tanggal terlama ke terbaru
             return stockData.reverse();
         }
 
@@ -282,43 +329,56 @@
                 reasons.push(`📉 Trend harga & volume turun - akumulasi diam-diam`);
             }
             
-            // Max score = 30 + 25 + 20 + 15 + 10 = 100
-            const normalizedScore = Math.min(10, Math.round(score / 5));
+            // Calculate percentage to dry condition (target score = 8)
+            const maxPossibleScore = 30 + 25 + 20 + 15 + 10;
+            const currentNormalizedScore = (score / maxPossibleScore) * 10;
+            const percentageToDry = Math.min(100, Math.max(0, (currentNormalizedScore / 8) * 100));
             
             // Prediction logic
             let status = 'NORMAL';
             let prediction = '';
-            let daysToDry = 0;
-            let confidence = 0;
+            let buyRecommendation = '';
+            let riskLevel = '';
+            let percentageText = '';
             
-            if (normalizedScore >= 8) {
+            if (currentNormalizedScore >= 8) {
                 status = 'POTENSI';
-                daysToDry = 0;
-                confidence = Math.min(95, 70 + (normalizedScore - 8) * 12);
-                prediction = `🎯 SAHAM SUDAH KERING! Potensi rally sangat tinggi dalam 1-2 hari ke depan (Confidence: ${confidence}%)`;
-            } else if (normalizedScore >= 6) {
+                percentageText = '100% - SUDAH KERING';
+                buyRecommendation = 'BELI SEKARANG! 🚀';
+                riskLevel = 'risk-low';
+                prediction = `🎯 SAHAM SUDAH KERING! Potensi rally sangat tinggi dalam 1-2 hari ke depan`;
+            } else if (currentNormalizedScore >= 6) {
                 status = 'MENUJU KERING';
-                daysToDry = Math.max(1, Math.round((8 - normalizedScore) * 2));
-                confidence = Math.min(80, 50 + (normalizedScore - 6) * 15);
-                prediction = `📈 Menuju kondisi kering dalam ${daysToDry} hari lagi. Confidence: ${confidence}%`;
-            } else if (normalizedScore >= 4) {
+                const progress = ((currentNormalizedScore - 6) / 2) * 100;
+                percentageText = `${Math.round(progress)}% menuju kering`;
+                buyRecommendation = 'BISA DIAKUMULASI 📈';
+                riskLevel = 'risk-medium';
+                prediction = `📈 Saham mendekati kondisi kering, siap-siap untuk entry`;
+            } else if (currentNormalizedScore >= 4) {
                 status = 'NORMAL';
-                daysToDry = Math.max(2, Math.round((8 - normalizedScore) * 3));
-                confidence = Math.min(60, 30 + (normalizedScore - 4) * 10);
-                prediction = `⚖️ Saham dalam kondisi normal, butuh ${daysToDry} hari menuju kering. Confidence: ${confidence}%`;
+                const progress = ((currentNormalizedScore - 4) / 2) * 100;
+                percentageText = `${Math.round(progress)}% menuju kering`;
+                buyRecommendation = 'TUNGGU SINYAL LEBIH KUAT ⏳';
+                riskLevel = 'risk-medium';
+                prediction = `⚖️ Saham dalam kondisi normal, tunggu sinyal lebih kuat`;
             } else {
-                status = 'NORMAL';
+                status = 'TUNGGU';
+                percentageText = `${Math.round(percentageToDry)}% menuju kering`;
+                buyRecommendation = 'TUNDA BELI ❌';
+                riskLevel = 'risk-high';
                 prediction = `💤 Saham masih normal, belum menunjukkan tanda-tanda kering`;
             }
             
             return {
                 status,
-                score: normalizedScore,
+                score: Math.round(currentNormalizedScore * 10) / 10,
                 rawScore: score,
                 reasons,
                 prediction,
-                daysToDry,
-                confidence,
+                buyRecommendation,
+                riskLevel,
+                percentageToDry: Math.round(percentageToDry),
+                percentageText,
                 metrics: {
                     rsi: currentRSI,
                     volumeRatio,
@@ -347,7 +407,6 @@
             
             const rsi = [];
             
-            // Calculate first RSI
             let avgGain = gains.slice(0, period).reduce((a, b) => a + b) / period;
             let avgLoss = losses.slice(0, period).reduce((a, b) => a + b) / period;
             
@@ -358,7 +417,6 @@
                 rsi.push(100 - (100 / (1 + rs)));
             }
             
-            // Calculate subsequent RSIs
             for (let i = period; i < gains.length; i++) {
                 avgGain = ((avgGain * (period - 1)) + gains[i]) / period;
                 avgLoss = ((avgLoss * (period - 1)) + losses[i]) / period;
@@ -405,8 +463,32 @@
             const resultDiv = document.getElementById('result');
             resultDiv.style.display = 'block';
             
+            // Determine buy recommendation class
+            let buyClass = 'buy-wait';
+            if (analysis.status === 'POTENSI') {
+                buyClass = 'buy-yes';
+            } else if (analysis.status === 'TUNGGU') {
+                buyClass = 'buy-no';
+            }
+            
             let html = `
                 <h2>📊 Hasil Analisis: <strong>${analysis.status}</strong></h2>
+                
+                <div class="buy-recommendation ${buyClass}">
+                    ${analysis.buyRecommendation}
+                    <span class="risk-level ${analysis.riskLevel}">
+                        ${analysis.riskLevel.replace('risk-', '').toUpperCase()}
+                    </span>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <strong>Progress Menuju Kondisi Kering:</strong>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${analysis.percentageToDry}%"></div>
+                    </div>
+                    <div style="text-align: center; font-weight: bold;">${analysis.percentageText}</div>
+                </div>
+                
                 <div class="metric-grid">
                     <div class="metric-card">
                         <div class="metric-value">${analysis.score}/10</div>
@@ -444,14 +526,6 @@
                 html += `</ul></div>`;
             }
             
-            if (analysis.daysToDry > 0 && analysis.status !== 'POTENSI') {
-                html += `
-                    <div style="margin-top: 15px; padding: 12px; background: #e7f3ff; border-radius: 6px;">
-                        <strong>⏳ Perkiraan:</strong> Butuh ${analysis.daysToDry} hari lagi menuju kondisi kering
-                    </div>
-                `;
-            }
-            
             // Add detailed metrics
             html += `
                 <div style="margin-top: 20px;">
@@ -477,9 +551,26 @@
                 </div>
             `;
             
+            // Add trading advice based on status
+            html += `
+                <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px;">
+                    <h3>💡 Saran Trading:</h3>
+                    <p><strong>${
+                        analysis.status === 'POTENSI' ? 
+                        'BELI SEKARANG! - Saham sudah dalam kondisi kering, potensi rally tinggi dalam 1-2 hari ke depan. Entry dengan posisi maksimal.' :
+                        analysis.status === 'MENUJU KERING' ?
+                        'SIAP-SIAP BELI - Saham mendekati kondisi kering. Bisa mulai akumulasi dengan posisi kecil, tambah jika konfirmasi kuat.' :
+                        analysis.status === 'NORMAL' ?
+                        'TUNGGU - Saham masih normal. Pantau terus, tunggu sinyal volume dan RSI lebih kuat.' :
+                        'TUNDA DULU - Saham belum menunjukkan tanda-tanda kering. Risiko masih tinggi untuk entry sekarang.'
+                    }</strong></p>
+                </div>
+            `;
+            
             resultDiv.className = 'result ' + 
                 (analysis.status === 'POTENSI' ? 'potensi' : 
-                 analysis.status === 'MENUJU KERING' ? 'menuju-kering' : 'normal');
+                 analysis.status === 'MENUJU KERING' ? 'menuju-kering' :
+                 analysis.status === 'NORMAL' ? 'normal' : 'tunggu');
             resultDiv.innerHTML = html;
             
             createChart(stockData, analysis);
@@ -489,9 +580,7 @@
             const ctx = document.getElementById('stockChart').getContext('2d');
             const dates = stockData.map(d => d.Date);
             const closes = stockData.map(d => d.Close);
-            const volumes = stockData.map(d => d.Volume);
             
-            // Clear previous chart
             if (window.stockChartInstance) {
                 window.stockChartInstance.destroy();
             }
