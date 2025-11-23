@@ -167,21 +167,30 @@
         .risk-low { background: #28a745; color: white; }
         .risk-medium { background: #ffc107; color: black; }
         .risk-high { background: #dc3545; color: white; }
+        .signal-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .signal-strong { background: #28a745; }
+        .signal-medium { background: #ffc107; }
+        .signal-weak { background: #dc3545; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔍 Stock Dryness Analyzer</h1>
-        <p>Analisis saham untuk mendeteksi kondisi "kering" atau "under value"</p>
+        <h1>🔍 Stock Dryness Analyzer v2</h1>
+        <p>Analisis saham untuk mendeteksi kondisi "kering" atau "under value" - Algorithm Improved</p>
         
         <div class="input-section">
             <h3>📊 Paste Data Saham (Format Original):</h3>
             <p><small>Copy-paste langsung data dari sumber tanpa perubahan format</small></p>
             <textarea id="stockData" placeholder="Contoh:
-1	21-11-2025	2.370	2.390	2.280	2.310	4.425.100	10.221.981.000	0.85%	1.70%	-2.98%	-1.70%	0.84%	2.51%
-2	20-11-2025	2.370	2.440	2.330	2.350	5.542.900	13.025.815.000	0.00%	2.95%	-1.69%	-0.84%	2.95%	4.51%
-3	19-11-2025	2.430	2.440	2.330	2.370	4.330.100	10.262.337.000	2.10%	2.52%	-2.10%	-0.42%	0.41%	4.92%
-4	18-11-2025	2.470	2.470	2.320	2.380	5.458.900	12.992.182.000	-0.40%	-0.40%	-6.45%	-4.03%	0.00%	4.45%"></textarea>
+3	19-11-2025	83	83	81	81	71.662.000	5.804.622.000	0.00%	0.00%	-2.41%	-2.41%	0.00%	1.20%
+4	18-11-2025	85	86	82	83	186.766.100	15.501.586.300	0.00%	1.18%	-3.53%	-2.35%	1.18%	2.33%
+5	17-11-2025	85	86	84	85	285.654.200	24.280.607.000	1.19%	2.38%	0.00%	1.19%	1.18%	3.49%"></textarea>
             <button onclick="analyzeStock()">🚀 Analisis Saham</button>
         </div>
 
@@ -245,128 +254,187 @@
             const lows = stockData.map(d => d.Low);
             const opens = stockData.map(d => d.Open);
             
-            // 1. RSI Calculation
-            const rsi = calculateRSI(closes);
+            // Enhanced RSI Calculation dengan periode lebih pendek
+            const rsi = calculateRSI(closes, 10); // Periode lebih pendek untuk respons lebih cepat
             const currentRSI = rsi[rsi.length - 1];
             
-            // 2. Volume Analysis
-            const avgVolume = calculateAverage(volumes);
+            // Volume Analysis dengan multiple timeframe
+            const avgVolume5 = calculateAverage(volumes.slice(-5));
+            const avgVolume10 = calculateAverage(volumes.slice(-10));
             const currentVolume = volumes[volumes.length - 1];
-            const volumeRatio = currentVolume / avgVolume;
+            const volumeRatio5 = currentVolume / avgVolume5;
+            const volumeRatio10 = currentVolume / avgVolume10;
             
-            // 3. Price Momentum
-            const shortMA = calculateMA(closes, 3);
-            const mediumMA = calculateMA(closes, 5);
-            const longMA = calculateMA(closes, Math.min(10, stockData.length));
+            // Price Momentum dengan multiple MA
+            const ma3 = calculateMA(closes, 3);
+            const ma5 = calculateMA(closes, 5);
+            const ma10 = calculateMA(closes, Math.min(10, stockData.length));
             const currentPrice = closes[closes.length - 1];
             
-            // 4. Volatility Analysis
-            const dailyRanges = highs.map((high, i) => high - lows[i]);
-            const avgRange = calculateAverage(dailyRanges);
+            // Enhanced Volatility Analysis
+            const dailyRanges = highs.map((high, i) => (high - lows[i]) / lows[i]);
+            const avgRange5 = calculateAverage(dailyRanges.slice(-5));
             const currentRange = dailyRanges[dailyRanges.length - 1];
-            const rangeRatio = currentRange / avgRange;
+            const rangeRatio = currentRange / avgRange5;
             
-            // 5. Price Position
-            const recentLows = lows.slice(-5);
-            const recentHighs = highs.slice(-5);
+            // Price Position dengan support dinamis
+            const recentLows = lows.slice(-7); // 7 hari terakhir untuk support
+            const recentHighs = highs.slice(-7);
             const supportLevel = Math.min(...recentLows);
             const resistanceLevel = Math.max(...recentHighs);
             const pricePosition = (currentPrice - supportLevel) / (resistanceLevel - supportLevel);
             
-            // 6. Trend Analysis
-            const priceTrend = calculateTrend(closes, 3);
-            const volumeTrend = calculateTrend(volumes, 3);
+            // Trend Analysis dengan momentum
+            const priceTrend3 = calculateTrend(closes, 3);
+            const priceTrend5 = calculateTrend(closes, 5);
+            const volumeTrend3 = calculateTrend(volumes, 3);
             
-            // Scoring System
+            // New: Compression Detection (harga dan volume menyempit)
+            const priceCompression = calculateCompression(closes, 5);
+            const volumeCompression = calculateCompression(volumes, 5);
+            
+            // New: Breakout Potential
+            const breakoutPotential = calculateBreakoutPotential(highs, lows, closes, volumes);
+            
+            // Enhanced Scoring System
             let score = 0;
             let reasons = [];
-            
-            // RSI Analysis (30 points max)
+            let signals = [];
+
+            // 1. RSI Analysis - Lebih sensitif (35 points)
             if (currentRSI < 25) {
-                score += 12;
-                reasons.push(`🎯 RSI SANGAT RENDAH (${currentRSI.toFixed(1)}) - Kondisi oversold ekstrem`);
+                score += 15;
+                reasons.push(`🎯 RSI SANGAT RENDAH (${currentRSI.toFixed(1)}) - OVERSOLD EKSTREM`);
+                signals.push('strong');
             } else if (currentRSI < 30) {
-                score += 8;
-                reasons.push(`📉 RSI rendah (${currentRSI.toFixed(1)}) - Kondisi oversold`);
-            } else if (currentRSI < 35) {
-                score += 4;
-                reasons.push(`📊 RSI mendekati oversold (${currentRSI.toFixed(1)})`);
-            }
-            
-            // Volume Analysis (25 points max)
-            if (volumeRatio < 0.5) {
                 score += 10;
-                reasons.push(`💧 VOLUME SANGAT KERING (${(volumeRatio * 100).toFixed(1)}% dari rata-rata)`);
-            } else if (volumeRatio < 0.7) {
-                score += 7;
-                reasons.push(`💨 Volume rendah (${(volumeRatio * 100).toFixed(1)}% dari rata-rata)`);
-            } else if (volumeRatio < 0.9) {
-                score += 3;
-                reasons.push(`🌬️ Volume menurun (${(volumeRatio * 100).toFixed(1)}% dari rata-rata)`);
-            }
-            
-            // Volatility Analysis (20 points max)
-            if (rangeRatio < 0.5) {
-                score += 8;
-                reasons.push(`⚡ VOLATILITAS SANGAT RENDAH (${(rangeRatio * 100).toFixed(1)}% dari rata-rata)`);
-            } else if (rangeRatio < 0.7) {
-                score += 5;
-                reasons.push(`📏 Volatilitas rendah (${(rangeRatio * 100).toFixed(1)}% dari rata-rata)`);
-            }
-            
-            // Price Position (15 points max)
-            if (pricePosition < 0.2) {
-                score += 8;
-                reasons.push(`🛡️ HARGA DEKAT SUPPORT (${(pricePosition * 100).toFixed(1)}% dari range)`);
-            } else if (pricePosition < 0.3) {
-                score += 4;
-                reasons.push(`📈 Harga mendekati support (${(pricePosition * 100).toFixed(1)}% dari range)`);
-            }
-            
-            // Trend Analysis (10 points max)
-            if (priceTrend < -0.02 && volumeTrend < -0.1) {
+                reasons.push(`📉 RSI rendah (${currentRSI.toFixed(1)}) - Kondisi oversold`);
+                signals.push('strong');
+            } else if (currentRSI < 35) {
                 score += 6;
-                reasons.push(`📉 Trend harga & volume turun - akumulasi diam-diam`);
+                reasons.push(`📊 RSI mendekati oversold (${currentRSI.toFixed(1)})`);
+                signals.push('medium');
+            } else if (currentRSI < 40) {
+                score += 3;
+                reasons.push(`⚖️ RSI netral cenderung rendah (${currentRSI.toFixed(1)})`);
+                signals.push('medium');
             }
-            
-            // Calculate percentage to dry condition (target score = 8)
-            const maxPossibleScore = 30 + 25 + 20 + 15 + 10;
+
+            // 2. Volume Analysis - Lebih sensitif (30 points)
+            if (volumeRatio5 < 0.4 && volumeRatio10 < 0.5) {
+                score += 12;
+                reasons.push(`💧 VOLUME SANGAT KERING (${(volumeRatio5 * 100).toFixed(1)}% dari rata2 5 hari)`);
+                signals.push('strong');
+            } else if (volumeRatio5 < 0.6 && volumeRatio10 < 0.7) {
+                score += 8;
+                reasons.push(`💨 Volume rendah (${(volumeRatio5 * 100).toFixed(1)}% dari rata2 5 hari)`);
+                signals.push('strong');
+            } else if (volumeRatio5 < 0.8) {
+                score += 4;
+                reasons.push(`🌬️ Volume menurun (${(volumeRatio5 * 100).toFixed(1)}% dari rata2 5 hari)`);
+                signals.push('medium');
+            }
+
+            // 3. Price Position - Lebih agresif (20 points)
+            if (pricePosition < 0.15) {
+                score += 10;
+                reasons.push(`🛡️ HARGA SANGAT DEKAT SUPPORT (${(pricePosition * 100).toFixed(1)}% dari range)`);
+                signals.push('strong');
+            } else if (pricePosition < 0.25) {
+                score += 6;
+                reasons.push(`📈 Harga dekat support (${(pricePosition * 100).toFixed(1)}% dari range)`);
+                signals.push('medium');
+            } else if (pricePosition < 0.35) {
+                score += 3;
+                reasons.push(`📊 Harga mendekati area support (${(pricePosition * 100).toFixed(1)}% dari range)`);
+                signals.push('medium');
+            }
+
+            // 4. Volatility Analysis (15 points)
+            if (rangeRatio < 0.4) {
+                score += 8;
+                reasons.push(`⚡ VOLATILITAS SANGAT RENDAH (${(rangeRatio * 100).toFixed(1)}% dari rata2)`);
+                signals.push('strong');
+            } else if (rangeRatio < 0.6) {
+                score += 5;
+                reasons.push(`📏 Volatilitas rendah (${(rangeRatio * 100).toFixed(1)}% dari rata2)`);
+                signals.push('medium');
+            }
+
+            // 5. Compression Detection - NEW (15 points)
+            if (priceCompression > 0.8 && volumeCompression > 0.7) {
+                score += 8;
+                reasons.push(`🎭 KOMPRESI TINGGI - Harga dan volume menyempit, siap ekspansi`);
+                signals.push('strong');
+            } else if (priceCompression > 0.6) {
+                score += 4;
+                reasons.push(`📐 Harga terkonsolidasi (kompresi ${(priceCompression * 100).toFixed(1)}%)`);
+                signals.push('medium');
+            }
+
+            // 6. Breakout Potential - NEW (15 points)
+            if (breakoutPotential > 0.7) {
+                score += 8;
+                reasons.push(`🚀 POTENSI BREAKOUT TINGGI (${(breakoutPotential * 100).toFixed(1)}%)`);
+                signals.push('strong');
+            } else if (breakoutPotential > 0.5) {
+                score += 4;
+                reasons.push(`📈 Potensi breakout sedang (${(breakoutPotential * 100).toFixed(1)}%)`);
+                signals.push('medium');
+            }
+
+            // 7. Trend Momentum (10 points)
+            if (priceTrend3 < -0.03 && volumeTrend3 < -0.2) {
+                score += 6;
+                reasons.push(`📉 Trend turun kuat - kemungkinan kapitulasi`);
+                signals.push('medium');
+            } else if (priceTrend5 < -0.02) {
+                score += 3;
+                reasons.push(`↘️ Trend jangka pendek turun`);
+                signals.push('weak');
+            }
+
+            // Calculate signal strength
+            const strongSignals = signals.filter(s => s === 'strong').length;
+            const mediumSignals = signals.filter(s => s === 'medium').length;
+            const totalSignals = signals.length;
+
+            // Enhanced percentage calculation
+            const maxPossibleScore = 35 + 30 + 20 + 15 + 15 + 15 + 10;
             const currentNormalizedScore = (score / maxPossibleScore) * 10;
-            const percentageToDry = Math.min(100, Math.max(0, (currentNormalizedScore / 8) * 100));
-            
-            // Prediction logic
+            const percentageToDry = Math.min(100, Math.max(0, (currentNormalizedScore / 7) * 100));
+
+            // Enhanced Prediction logic
             let status = 'NORMAL';
             let prediction = '';
             let buyRecommendation = '';
             let riskLevel = '';
             let percentageText = '';
-            
-            if (currentNormalizedScore >= 8) {
+
+            if (currentNormalizedScore >= 7 || strongSignals >= 3) {
                 status = 'POTENSI';
-                percentageText = '100% - SUDAH KERING';
+                percentageText = '100% - SUDAH KERING!';
                 buyRecommendation = 'BELI SEKARANG! 🚀';
                 riskLevel = 'risk-low';
-                prediction = `🎯 SAHAM SUDAH KERING! Potensi rally sangat tinggi dalam 1-2 hari ke depan`;
-            } else if (currentNormalizedScore >= 6) {
+                prediction = `🎯 SAHAM SUDAH KERING! ${strongSignals} sinyal kuat terdeteksi. Potensi rally sangat tinggi!`;
+            } else if (currentNormalizedScore >= 5.5 || (strongSignals >= 2 && mediumSignals >= 2)) {
                 status = 'MENUJU KERING';
-                const progress = ((currentNormalizedScore - 6) / 2) * 100;
-                percentageText = `${Math.round(progress)}% menuju kering`;
-                buyRecommendation = 'BISA DIAKUMULASI 📈';
+                percentageText = `${Math.round(percentageToDry)}% menuju kering`;
+                buyRecommendation = 'SIAP-SIAP BELI 📈';
                 riskLevel = 'risk-medium';
-                prediction = `📈 Saham mendekati kondisi kering, siap-siap untuk entry`;
+                prediction = `📈 Saham mendekati kondisi kering. ${strongSignals} sinyal kuat, ${mediumSignals} sinyal medium`;
             } else if (currentNormalizedScore >= 4) {
                 status = 'NORMAL';
-                const progress = ((currentNormalizedScore - 4) / 2) * 100;
-                percentageText = `${Math.round(progress)}% menuju kering`;
+                percentageText = `${Math.round(percentageToDry)}% menuju kering`;
                 buyRecommendation = 'TUNGGU SINYAL LEBIH KUAT ⏳';
                 riskLevel = 'risk-medium';
-                prediction = `⚖️ Saham dalam kondisi normal, tunggu sinyal lebih kuat`;
+                prediction = `⚖️ Saham dalam kondisi normal. ${strongSignals} sinyal kuat terdeteksi`;
             } else {
                 status = 'TUNGGU';
                 percentageText = `${Math.round(percentageToDry)}% menuju kering`;
                 buyRecommendation = 'TUNDA BELI ❌';
                 riskLevel = 'risk-high';
-                prediction = `💤 Saham masih normal, belum menunjukkan tanda-tanda kering`;
+                prediction = `💤 Butuh lebih banyak sinyal untuk konfirmasi`;
             }
             
             return {
@@ -379,13 +447,21 @@
                 riskLevel,
                 percentageToDry: Math.round(percentageToDry),
                 percentageText,
+                signalStrength: {
+                    strong: strongSignals,
+                    medium: mediumSignals,
+                    total: totalSignals
+                },
                 metrics: {
                     rsi: currentRSI,
-                    volumeRatio,
+                    volumeRatio5: volumeRatio5,
+                    volumeRatio10: volumeRatio10,
                     rangeRatio,
                     pricePosition,
-                    priceTrend,
-                    volumeTrend,
+                    priceTrend3: priceTrend3,
+                    priceTrend5: priceTrend5,
+                    compression: priceCompression,
+                    breakoutPotential,
                     currentPrice,
                     supportLevel,
                     resistanceLevel
@@ -393,7 +469,51 @@
             };
         }
 
-        function calculateRSI(closes, period = 14) {
+        // NEW: Compression calculation
+        function calculateCompression(data, period) {
+            if (data.length < period) return 0;
+            
+            const recent = data.slice(-period);
+            const ranges = [];
+            
+            for (let i = 1; i < recent.length; i++) {
+                const range = Math.abs(recent[i] - recent[i-1]) / recent[i-1];
+                ranges.push(range);
+            }
+            
+            const avgRange = calculateAverage(ranges);
+            const maxRange = Math.max(...ranges);
+            
+            if (maxRange === 0) return 1;
+            return 1 - (avgRange / maxRange);
+        }
+
+        // NEW: Breakout potential calculation
+        function calculateBreakoutPotential(highs, lows, closes, volumes) {
+            const recentHighs = highs.slice(-5);
+            const recentLows = lows.slice(-5);
+            const recentCloses = closes.slice(-5);
+            const recentVolumes = volumes.slice(-5);
+            
+            const resistance = Math.max(...recentHighs);
+            const support = Math.min(...recentLows);
+            const currentClose = recentCloses[recentCloses.length - 1];
+            const currentVolume = recentVolumes[recentVolumes.length - 1];
+            const avgVolume = calculateAverage(recentVolumes.slice(0, -1));
+            
+            const priceNearResistance = (resistance - currentClose) / resistance < 0.02;
+            const volumeSpike = currentVolume > avgVolume * 1.5;
+            const narrowRange = (resistance - support) / support < 0.05;
+            
+            let potential = 0;
+            if (priceNearResistance) potential += 0.4;
+            if (volumeSpike) potential += 0.3;
+            if (narrowRange) potential += 0.3;
+            
+            return potential;
+        }
+
+        function calculateRSI(closes, period = 10) {
             if (closes.length < period + 1) return Array(closes.length).fill(50);
             
             const gains = [];
@@ -463,7 +583,6 @@
             const resultDiv = document.getElementById('result');
             resultDiv.style.display = 'block';
             
-            // Determine buy recommendation class
             let buyClass = 'buy-wait';
             if (analysis.status === 'POTENSI') {
                 buyClass = 'buy-yes';
@@ -496,16 +615,23 @@
                     </div>
                     <div class="metric-card">
                         <div class="metric-value">${analysis.metrics.rsi.toFixed(1)}</div>
-                        <div class="metric-label">RSI CURRENT</div>
+                        <div class="metric-label">RSI (10)</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-value">${(analysis.metrics.volumeRatio * 100).toFixed(1)}%</div>
-                        <div class="metric-label">VOLUME RATIO</div>
+                        <div class="metric-value">${(analysis.metrics.volumeRatio5 * 100).toFixed(1)}%</div>
+                        <div class="metric-label">VOLUME vs 5d AVG</div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-value">${analysis.metrics.currentPrice.toFixed(3)}</div>
                         <div class="metric-label">CURRENT PRICE</div>
                     </div>
+                </div>
+                
+                <div style="margin: 10px 0;">
+                    <strong>Sinyal Terdeteksi:</strong> 
+                    <span class="signal-indicator signal-strong"></span>Kuat: ${analysis.signalStrength.strong} 
+                    <span class="signal-indicator signal-medium"></span>Medium: ${analysis.signalStrength.medium} 
+                    <span class="signal-indicator signal-weak"></span>Total: ${analysis.signalStrength.total}
                 </div>
                 
                 <div style="margin: 20px 0; padding: 15px; background: white; border-radius: 8px;">
@@ -526,7 +652,7 @@
                 html += `</ul></div>`;
             }
             
-            // Add detailed metrics
+            // Enhanced detailed metrics
             html += `
                 <div style="margin-top: 20px;">
                     <h3>🔍 Detailed Metrics:</h3>
@@ -540,30 +666,14 @@
                             <div class="metric-label">RESISTANCE LEVEL</div>
                         </div>
                         <div class="metric-card">
-                            <div class="metric-value">${(analysis.metrics.rangeRatio * 100).toFixed(1)}%</div>
-                            <div class="metric-label">VOLATILITY RATIO</div>
+                            <div class="metric-value">${(analysis.metrics.compression * 100).toFixed(1)}%</div>
+                            <div class="metric-label">PRICE COMPRESSION</div>
                         </div>
                         <div class="metric-card">
-                            <div class="metric-value">${(analysis.metrics.priceTrend * 100).toFixed(1)}%</div>
-                            <div class="metric-label">PRICE TREND (3d)</div>
+                            <div class="metric-value">${(analysis.metrics.breakoutPotential * 100).toFixed(1)}%</div>
+                            <div class="metric-label">BREAKOUT POTENTIAL</div>
                         </div>
                     </div>
-                </div>
-            `;
-            
-            // Add trading advice based on status
-            html += `
-                <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px;">
-                    <h3>💡 Saran Trading:</h3>
-                    <p><strong>${
-                        analysis.status === 'POTENSI' ? 
-                        'BELI SEKARANG! - Saham sudah dalam kondisi kering, potensi rally tinggi dalam 1-2 hari ke depan. Entry dengan posisi maksimal.' :
-                        analysis.status === 'MENUJU KERING' ?
-                        'SIAP-SIAP BELI - Saham mendekati kondisi kering. Bisa mulai akumulasi dengan posisi kecil, tambah jika konfirmasi kuat.' :
-                        analysis.status === 'NORMAL' ?
-                        'TUNGGU - Saham masih normal. Pantau terus, tunggu sinyal volume dan RSI lebih kuat.' :
-                        'TUNDA DULU - Saham belum menunjukkan tanda-tanda kering. Risiko masih tinggi untuk entry sekarang.'
-                    }</strong></p>
                 </div>
             `;
             
@@ -580,24 +690,35 @@
             const ctx = document.getElementById('stockChart').getContext('2d');
             const dates = stockData.map(d => d.Date);
             const closes = stockData.map(d => d.Close);
+            const volumes = stockData.map(d => d.Volume);
             
             if (window.stockChartInstance) {
                 window.stockChartInstance.destroy();
             }
             
+            // Create combined chart
             window.stockChartInstance = new Chart(ctx, {
-                type: 'line',
+                type: 'bar',
                 data: {
                     labels: dates,
-                    datasets: [{
-                        label: 'Close Price',
-                        data: closes,
-                        borderColor: '#28a745',
-                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                        yAxisID: 'y'
-                    }]
+                    datasets: [
+                        {
+                            label: 'Close Price',
+                            data: closes,
+                            type: 'line',
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Volume',
+                            data: volumes,
+                            backgroundColor: 'rgba(200, 200, 200, 0.3)',
+                            yAxisID: 'y1'
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
@@ -614,18 +735,27 @@
                                 display: true,
                                 text: 'Price'
                             }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                            title: {
+                                display: true,
+                                text: 'Volume'
+                            }
                         }
                     },
                     plugins: {
                         title: {
                             display: true,
-                            text: `Stock Price Chart - Status: ${analysis.status}`,
+                            text: `Stock Analysis - Status: ${analysis.status}`,
                             font: {
                                 size: 16
                             }
-                        },
-                        legend: {
-                            display: true
                         }
                     }
                 }
